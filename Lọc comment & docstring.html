@@ -1,0 +1,1390 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lọc comment &amp; docstring</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Be+Vietnam+Pro:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap&subset=vietnamese" rel="stylesheet">
+<style>
+/* Layout: a proof-reading desk — source on the left, cleaned copy on the right; removed text is struck through like an editor's red pen. */
+:root {
+  --paper: #eceef2;
+  --sheet: #ffffff;
+  --ink: #14171c;
+  --muted: #5b6372;
+  --line: #d4d8e0;
+  --accent: #2a47c9;
+  --del: #c8402a;
+  --del-bg: #fbe6e1;
+  --doc: #9a6512;
+  --doc-bg: #fbf0d9;
+  --keep: #0d7c62;
+  --keep-bg: #dcf3ec;
+  --font-display: "Bricolage Grotesque", "Be Vietnam Pro", system-ui, sans-serif;
+  --font-body: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0e1014; --sheet: #161a21; --ink: #e7e9ee; --muted: #98a1b0; --line: #2a303a;
+    --accent: #8ba2ff; --del: #ff8266; --del-bg: #3a1d17; --doc: #f2bc55; --doc-bg: #352812; --keep: #45d5aa; --keep-bg: #10302a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0e1014; --sheet: #161a21; --ink: #e7e9ee; --muted: #98a1b0; --line: #2a303a;
+  --accent: #8ba2ff; --del: #ff8266; --del-bg: #3a1d17; --doc: #f2bc55; --doc-bg: #352812; --keep: #45d5aa; --keep-bg: #10302a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--paper); color: var(--ink); font: 15px/1.55 var(--font-body); }
+.wrap { max-width: 1320px; margin: 0 auto; padding: 28px 20px 40px; display: grid; gap: 18px; }
+
+header { display: grid; gap: 6px; }
+h1 { font: 800 clamp(30px, 4.6vw, 52px)/1.02 var(--font-display); letter-spacing: -0.025em; margin: 0; text-wrap: balance; }
+h1 .pen { position: relative; color: var(--muted); white-space: nowrap; }
+h1 .pen::after { content: ""; position: absolute; left: -2%; right: -2%; top: 54%; height: 0.09em; background: var(--del); transform-origin: left; transform: scaleX(1); border-radius: 2px; }
+@media (prefers-reduced-motion: no-preference) { h1 .pen::after { animation: strike 0.7s 0.25s cubic-bezier(.6,0,.2,1) both; } }
+@keyframes strike { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.lede { margin: 0; color: var(--muted); max-width: 70ch; }
+.lede code { font: 13px var(--font-mono); color: var(--ink); }
+
+.bar { background: var(--sheet); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.group { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.label { font: 600 11px var(--font-body); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; padding: 2px; background: var(--paper); }
+.seg button { border: 0; background: transparent; color: var(--muted); font: 500 14px var(--font-body); padding: 6px 12px; border-radius: 7px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--sheet); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+select { font: 500 14px var(--font-body); color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 9px; padding: 7px 10px; max-width: 260px; }
+.chip { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px 5px 9px; cursor: pointer; font-size: 14px; user-select: none; background: var(--sheet); }
+.chip input { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
+.chip:has(input:checked) { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: color-mix(in srgb, var(--accent) 8%, var(--sheet)); }
+.chip small { color: var(--muted); font-size: 12px; }
+.nbonly[hidden] { display: none; }
+
+.desk { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; min-height: 0; }
+@media (max-width: 900px) { .desk { grid-template-columns: 1fr; } }
+.panel { background: var(--sheet); border: 1px solid var(--line); border-radius: 12px; display: grid; grid-template-rows: auto auto 1fr auto; min-width: 0; overflow: hidden; position: relative; }
+.phead { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px 8px; flex-wrap: wrap; }
+.phead h2 { font: 700 18px var(--font-display); margin: 0; letter-spacing: -0.01em; }
+.files { display: flex; gap: 6px; padding: 0 14px 10px; overflow-x: auto; scrollbar-width: thin; }
+.file { flex: none; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 8px; padding: 4px 6px 4px 10px; font: 13px var(--font-mono); background: var(--paper); color: var(--ink); cursor: pointer; max-width: 260px; }
+.file span.n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file em { font-style: normal; font: 11px var(--font-body); color: var(--muted); }
+.file[aria-current="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--sheet); }
+.file .x { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; padding: 2px 4px; border-radius: 4px; }
+.file .x:hover { color: var(--del); }
+.code { margin: 0; border-top: 1px solid var(--line); font: 13px/1.6 var(--font-mono); tab-size: 4; padding: 14px 16px; height: 62vh; min-height: 320px; overflow: auto; white-space: pre; color: var(--ink); background: var(--sheet); }
+textarea.code { width: 100%; resize: none; border-left: 0; border-right: 0; border-bottom: 0; outline: none; display: block; }
+textarea.code:focus-visible { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent); }
+.pfoot { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 10px 14px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.btn { font: 500 14px var(--font-body); border: 1px solid var(--line); background: var(--sheet); color: var(--ink); border-radius: 9px; padding: 7px 13px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--ink); color: var(--sheet); border-color: var(--ink); }
+.btn.primary:hover { opacity: .9; }
+.btn[hidden] { display: none; }
+.btn:disabled { opacity: .5; cursor: default; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hint { font-size: 13px; color: var(--muted); }
+
+.stats { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 14px 10px; font-size: 13px; }
+.stat { border-radius: 999px; padding: 2px 10px; background: var(--paper); color: var(--muted); font-variant-numeric: tabular-nums; }
+.stat b { font-weight: 600; color: var(--ink); }
+.stat.del { background: var(--del-bg); } .stat.del b { color: var(--del); }
+.stat.doc { background: var(--doc-bg); } .stat.doc b { color: var(--doc); }
+.stat.keep { background: var(--keep-bg); } .stat.keep b { color: var(--keep); }
+.stat.err { background: var(--del-bg); color: var(--del); }
+
+.m-del { color: var(--del); background: var(--del-bg); text-decoration: line-through; text-decoration-thickness: 1.5px; border-radius: 3px; }
+.m-doc { color: var(--doc); background: var(--doc-bg); text-decoration: line-through; text-decoration-thickness: 1.5px; border-radius: 3px; }
+.m-keep { color: var(--keep); background: var(--keep-bg); border-radius: 3px; }
+.m-cell { color: var(--accent); font-weight: 500; }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.legend i { font-style: normal; font-family: var(--font-mono); padding: 0 5px; }
+
+.drop { position: absolute; inset: 0; display: grid; place-items: center; background: color-mix(in srgb, var(--accent) 12%, var(--sheet)); border: 2px dashed var(--accent); border-radius: 12px; font: 700 20px var(--font-display); color: var(--accent); pointer-events: none; opacity: 0; transition: opacity .12s; }
+.panel.dragging .drop { opacity: 1; }
+.toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--sheet); padding: 8px 16px; border-radius: 10px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 9; }
+.toast.on { opacity: 1; }
+details.langs { font-size: 13px; color: var(--muted); }
+details.langs summary { cursor: pointer; width: fit-content; }
+details.langs p { margin: 6px 0 0; max-width: 110ch; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Lọc <span class="pen">comment</span> &amp; <span class="pen">docstring</span></h1>
+    <p class="lede">Dán code hoặc thả file, cả thư mục vào. Trang tách riêng phần chú thích khỏi phần code thật bằng bộ phân tích cú pháp cho từng ngôn ngữ, nên <code>"http://a.com"</code> hay <code>'#'</code> nằm trong chuỗi vẫn được giữ nguyên. Mọi thứ chạy ngay trong trình duyệt, code không gửi đi đâu.</p>
+    <details class="langs"><summary>Các ngôn ngữ được hỗ trợ</summary><p id="langList"></p></details>
+  </header>
+
+  <section class="bar" aria-label="Tuỳ chọn">
+    <div class="group">
+      <span class="label" id="modeLbl">Chế độ</span>
+      <div class="seg" role="group" aria-labelledby="modeLbl">
+        <button type="button" id="modeStrip" aria-pressed="true">Xoá khỏi code</button>
+        <button type="button" id="modeExtract" aria-pressed="false">Trích ra danh sách</button>
+      </div>
+    </div>
+    <div class="group">
+      <label class="label" for="lang">Ngôn ngữ</label>
+      <select id="lang"></select>
+    </div>
+    <div class="group" role="group" aria-label="Lọc những gì">
+      <label class="chip"><input type="checkbox" id="optComments" checked> Comment</label>
+      <label class="chip"><input type="checkbox" id="optDocs" checked> Docstring / doc comment</label>
+      <label class="chip" title="Shebang, coding:, # noqa, # type: ignore, // eslint-…, //go:build, /*! license */, SPDX…"><input type="checkbox" id="optKeep" checked> Giữ chỉ thị <small>noqa, eslint, go:build…</small></label>
+      <label class="chip"><input type="checkbox" id="optCollapse" checked> Gộp dòng trống</label>
+      <label class="chip nbonly" hidden><input type="checkbox" id="optNbMd"> Bỏ ô markdown</label>
+      <label class="chip nbonly" hidden><input type="checkbox" id="optNbOut"> Xoá output</label>
+    </div>
+  </section>
+
+  <main class="desk">
+    <section class="panel" id="inPanel" aria-labelledby="inTitle">
+      <div class="phead">
+        <h2 id="inTitle">Mã nguồn</h2>
+        <div class="group">
+          <button type="button" class="btn" id="pickFiles">Chọn file</button>
+          <button type="button" class="btn" id="pickDir">Chọn thư mục</button>
+          <button type="button" class="btn" id="clearAll" hidden>Bỏ hết file</button>
+        </div>
+        <input type="file" id="fileInput" multiple hidden>
+        <input type="file" id="dirInput" webkitdirectory multiple hidden>
+      </div>
+      <div class="files" id="files" role="tablist" aria-label="Các file"></div>
+      <textarea class="code" id="src" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Mã nguồn đầu vào"></textarea>
+      <div class="pfoot">
+        <span class="hint" id="inInfo">Thả file vào khung này cũng được.</span>
+        <button type="button" class="btn" id="loadSample">Nạp ví dụ</button>
+      </div>
+      <div class="drop">Thả file hoặc thư mục vào đây</div>
+    </section>
+
+    <section class="panel" aria-labelledby="outTitle">
+      <div class="phead">
+        <h2 id="outTitle">Kết quả</h2>
+        <div class="seg" role="group" aria-label="Kiểu xem">
+          <button type="button" id="viewOut" aria-pressed="true">Code sạch</button>
+          <button type="button" id="viewMark" aria-pressed="false">Đánh dấu bản gốc</button>
+        </div>
+      </div>
+      <div class="stats" id="stats" aria-live="polite"></div>
+      <pre class="code" id="out" tabindex="0" aria-label="Kết quả"></pre>
+      <div class="pfoot">
+        <div class="legend" id="legend" hidden><span><i class="m-del">comment</i> bị xoá</span><span><i class="m-doc">docstring</i> bị xoá</span><span><i class="m-keep">chỉ thị</i> giữ lại</span></div>
+        <span class="hint" id="outHint"></span>
+        <div class="group">
+          <button type="button" class="btn primary" id="copy">Copy</button>
+          <button type="button" class="btn" id="dlOne" hidden>Tải file này</button>
+          <button type="button" class="btn" id="dlAll" hidden>Tải tất cả (.zip)</button>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+/* Comment & docstring stripper — multi-language lexer core.
+   Works in the browser (window.Stripper) and in Node (module.exports). */
+(function (root) {
+  'use strict';
+
+  // ---------- generic engine ----------
+  const WS = /\s/;
+  const isWordCh = (c) => !!c && /[A-Za-z0-9_$]/.test(c);
+
+  function run(src, rules, base, stop) {
+    base = base || 0;
+    const n = src.length;
+    const segs = [];
+    const st = { lastSig: '', lastWord: '', heredocs: [] };
+    let i = 0, codeStart = 0;
+    const flush = (to) => { if (to > codeStart) segs.push({ t: 'code', s: codeStart + base, e: to + base }); };
+    outer: while (i < n) {
+      if (stop && src.startsWith(stop, i)) break;
+      for (const r of rules) {
+        const m = r(src, i, st);
+        if (!m) continue;
+        if (m.t === 'code' && !m.segs) { i = m.e; continue outer; }
+        flush(i);
+        if (m.segs) { for (const s of m.segs) segs.push({ ...s, s: s.s + base, e: s.e + base }); }
+        else {
+          segs.push({ t: m.t, s: i + base, e: m.e + base, doc: !!m.doc });
+          if (m.t === 'str') { st.lastSig = 'a'; st.lastWord = ''; }
+        }
+        i = m.e; codeStart = i;
+        continue outer;
+      }
+      const c = src[i];
+      if (!WS.test(c)) { st.prevSig = st.lastSig; st.lastSig = c; st.lastWord = ''; }
+      i++;
+    }
+    flush(i);
+    return { segs, end: i };
+  }
+
+  // ---------- rule builders ----------
+  function atLineStart(src, i) {
+    let j = i - 1;
+    while (j >= 0 && (src[j] === ' ' || src[j] === '\t')) j--;
+    return j < 0 || src[j] === '\n';
+  }
+  function eol(src, i) { const e = src.indexOf('\n', i); return e < 0 ? src.length : e; }
+  function oddBackslashes(src, i) { let k = 0, j = i - 1; while (j >= 0 && src[j] === '\\') { k++; j--; } return k % 2 === 1; }
+
+  function ident(extra) {
+    const re = new RegExp('[A-Za-z_' + (extra || '') + '][A-Za-z0-9_' + (extra || '') + ']*', 'y');
+    return (src, i, st) => {
+      re.lastIndex = i; const m = re.exec(src); if (!m) return null;
+      st.lastWord = m[0]; st.lastSig = 'a';
+      return { t: 'code', e: i + m[0].length };
+    };
+  }
+
+  function line(prefix, o) {
+    o = o || {};
+    return (src, i) => {
+      if (!src.startsWith(prefix, i)) return null;
+      if (o.lineStart && !atLineStart(src, i)) return null;
+      if (o.wordStart && i > 0 && !/[\s;|&()]/.test(src[i - 1])) return null;
+      if (o.wsBefore && i > 0 && !/\s/.test(src[i - 1])) return null;
+      if (o.noBackslash && oddBackslashes(src, i)) return null;
+      if (o.notNext && o.notNext.test(src[i + prefix.length] || '')) return null;
+      let e = eol(src, i);
+      if (o.cont) while (e < src.length && src[e - 1] === '\\') e = eol(src, e + 1);
+      if (o.stopAt) { const k = src.indexOf(o.stopAt, i); if (k >= 0 && k < e) e = k; }
+      return { t: 'com', e, doc: o.doc ? o.doc(src, i, e) : false };
+    };
+  }
+
+  function block(open, close, o) {
+    o = o || {};
+    return (src, i) => {
+      if (!src.startsWith(open, i)) return null;
+      if (o.not && o.not(src, i)) return null;
+      let j = i + open.length, d = 1;
+      while (j < src.length) {
+        if (o.nest && src.startsWith(open, j)) { d++; j += open.length; continue; }
+        if (src.startsWith(close, j)) { d--; j += close.length; if (d === 0) break; continue; }
+        j++;
+      }
+      if (d > 0) j = src.length;
+      return { t: o.as || 'com', e: j, doc: o.doc ? o.doc(src, i, j) : false };
+    };
+  }
+
+  function str(open, close, o) {
+    o = o || {};
+    const esc = o.esc === undefined ? '\\' : o.esc;
+    return (src, i) => {
+      if (!src.startsWith(open, i)) return null;
+      if (o.when && !o.when(src, i)) return null;
+      let j = i + open.length;
+      while (j < src.length) {
+        const c = src[j];
+        if (esc && c === esc) { j += 2; continue; }
+        if (src.startsWith(close, j)) {
+          if (o.doubled && src.startsWith(close, j + close.length)) { j += 2 * close.length; continue; }
+          return { t: 'str', e: j + close.length };
+        }
+        if (c === '\n' && !o.multiline) return { t: 'str', e: j };
+        j++;
+      }
+      return { t: 'str', e: src.length };
+    };
+  }
+
+  function rx(re, t, extra) {
+    const r = new RegExp(re.source, re.flags.includes('y') ? re.flags : re.flags + 'y');
+    return (src, i, st) => {
+      r.lastIndex = i; const m = r.exec(src); if (!m || !m[0].length) return null;
+      if (extra && !extra(src, i, st, m)) return null;
+      return { t, e: i + m[0].length };
+    };
+  }
+
+  // delimiter-matched (e.g. Lua [==[ ]==], Rust r##" "##)
+  function tagged(re, mkClose, t, docFn) {
+    const r = new RegExp(re.source, 'y');
+    return (src, i) => {
+      r.lastIndex = i; const m = r.exec(src); if (!m) return null;
+      const close = mkClose(m);
+      const k = src.indexOf(close, i + m[0].length);
+      const e = k < 0 ? src.length : k + close.length;
+      return { t, e, doc: docFn ? docFn(src, i, e, m) : false };
+    };
+  }
+
+  const charLit = rx(/'(?:\\(?:u\{[0-9a-fA-F]{1,6}\}|u+[0-9a-fA-F]{4}|x[0-9a-fA-F]{1,8}|[0-7]{1,3}|.)|[^\\'\n])'/, 'str');
+
+  // JS-family regex literal
+  const REGEX_PREV = '(,=:[!&|?{};+-*%~^';
+  const REGEX_KW = /^(return|typeof|case|do|else|in|of|new|delete|void|throw|yield|await|instanceof)$/;
+  function jsRegex(src, i, st) {
+    if (src[i] !== '/' || src[i + 1] === '/' || src[i + 1] === '*') return null;
+    const ok = (st.lastWord && REGEX_KW.test(st.lastWord)) || (!st.lastWord && (st.lastSig === '' || REGEX_PREV.includes(st.lastSig) || (st.lastSig === '>' && st.prevSig === '=')));
+    if (!ok) return null;
+    let j = i + 1, cls = false;
+    while (j < src.length) {
+      const c = src[j];
+      if (c === '\\') { j += 2; continue; }
+      if (c === '\n') return null;
+      if (cls) { if (c === ']') cls = false; }
+      else if (c === '[') cls = true;
+      else if (c === '/') { j++; while (/[a-z]/i.test(src[j] || '')) j++; return { t: 'str', e: j }; }
+      j++;
+    }
+    return null;
+  }
+  function scanQuoted(src, j, q) {
+    j++;
+    while (j < src.length) { const c = src[j]; if (c === '\\') { j += 2; continue; } if (c === q || c === '\n') return j + 1; j++; }
+    return src.length;
+  }
+  function scanTemplate(src, j) {
+    j++;
+    while (j < src.length) {
+      const c = src[j];
+      if (c === '\\') { j += 2; continue; }
+      if (c === '`') return j + 1;
+      if (c === '$' && src[j + 1] === '{') {
+        j += 2; let d = 1;
+        while (j < src.length && d > 0) {
+          const k = src[j];
+          if (k === '"' || k === "'") { j = scanQuoted(src, j, k); continue; }
+          if (k === '`') { j = scanTemplate(src, j); continue; }
+          if (k === '{') d++; else if (k === '}') d--;
+          j++;
+        }
+        continue;
+      }
+      j++;
+    }
+    return src.length;
+  }
+  const jsTemplate = (src, i) => (src[i] === '`' ? { t: 'str', e: scanTemplate(src, i) } : null);
+
+  // Python strings (prefixes, triple quotes, f-string nesting)
+  const PY_STR = /([rRbBuUfFtT]{0,3})('''|"""|'|")/y;
+  function pyStrAt(src, i) {
+    PY_STR.lastIndex = i; const m = PY_STR.exec(src); if (!m) return null;
+    const pre = m[1].toLowerCase();
+    if (pre && !/^(r|u|b|f|t|br|rb|fr|rf|tr|rt)$/.test(pre)) return null;
+    const q = m[2], triple = q.length === 3, f = /[ft]/.test(pre);
+    let j = i + m[0].length, depth = 0;
+    while (j < src.length) {
+      const c = src[j];
+      if (c === '\\') { j += 2; continue; }
+      if (f) {
+        if (c === '{') { if (depth === 0 && src[j + 1] === '{') { j += 2; continue; } depth++; j++; continue; }
+        if (c === '}') { if (depth > 0) depth--; j++; continue; }
+        if (depth > 0 && (c === '"' || c === "'")) { const sub = pyStrAt(src, j); if (sub) { j = sub.e; continue; } }
+      }
+      if (src.startsWith(q, j)) return { t: 'str', e: j + q.length };
+      if (c === '\n' && !triple) return { t: 'str', e: j };
+      j++;
+    }
+    return { t: 'str', e: src.length };
+  }
+
+  // shell heredoc
+  function heredocStart(src, i, st) {
+    const r = /<<(-?)[ \t]*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2/y;
+    r.lastIndex = i; const m = r.exec(src); if (!m) return null;
+    st.heredocs.push({ tag: m[3], dash: !!m[1] });
+    return { t: 'code', e: i + m[0].length };
+  }
+  function heredocBody(src, i, st) {
+    if (src[i] !== '\n' || !st.heredocs.length) return null;
+    let j = i + 1;
+    const segs = [{ t: 'code', s: i, e: i + 1 }];
+    while (st.heredocs.length) {
+      const h = st.heredocs.shift();
+      const bodyStart = j;
+      let end = src.length, found = false;
+      while (j < src.length) {
+        const le = eol(src, j);
+        const ln = src.slice(j, le);
+        if ((h.dash ? ln.replace(/^\t+/, '') : ln) === h.tag) { found = true; end = j; j = le; break; }
+        j = le + 1;
+      }
+      if (!found) { j = src.length; end = src.length; }
+      if (end > bodyStart) segs.push({ t: 'str', s: bodyStart, e: end });
+      if (j > end) segs.push({ t: 'code', s: end, e: j });
+      if (st.heredocs.length && j < src.length) { segs.push({ t: 'code', s: j, e: j + 1 }); j++; }
+    }
+    // remainder (tag line) left as code by engine
+    return { segs, e: Math.max(j, i + 1) };
+  }
+
+  // YAML block scalar: "key: |" → following more-indented lines are data
+  function yamlBlock(src, i) {
+    const c = src[i]; if (c !== '|' && c !== '>') return null;
+    const r = /[|>][-+0-9]*[ \t]*(?=#|\n|$)/y; r.lastIndex = i; const m = r.exec(src); if (!m) return null;
+    let k = i - 1; while (k >= 0 && (src[k] === ' ' || src[k] === '\t')) k--;
+    if (k >= 0 && src[k] !== ':' && src[k] !== '-' && src[k] !== '\n') return null;
+    const ls = src.lastIndexOf('\n', i - 1) + 1;
+    const baseIndent = /^[ \t]*/.exec(src.slice(ls))[0].length;
+    let le = eol(src, i);
+    const segs = [{ t: 'code', s: i, e: i + m[0].length }];
+    const restStart = i + m[0].length;
+    if (src[restStart] === '#') segs.push({ t: 'com', s: restStart, e: le });
+    else if (le > restStart) segs.push({ t: 'code', s: restStart, e: le });
+    let j = le, bodyEnd = le;
+    while (j < src.length) {
+      const ns = j + 1; if (ns >= src.length) break;
+      const ne = eol(src, ns); const ln = src.slice(ns, ne);
+      if (ln.trim() === '' || /^[ \t]*/.exec(ln)[0].length > baseIndent) { bodyEnd = ne; j = ne; continue; }
+      break;
+    }
+    if (bodyEnd > le) segs.push({ t: 'str', s: le, e: bodyEnd });
+    return { segs, e: bodyEnd };
+  }
+
+  // ---------- doc classifiers ----------
+  const cDocLine = (src, i) => (src.startsWith('///', i) && src[i + 3] !== '/') || src.startsWith('//!', i);
+  const cDocBlock = (src, i, e) => (src.startsWith('/**', i) && src[i + 3] !== '*' && src[i + 3] !== '/' && e - i > 4) || src.startsWith('/*!', i);
+
+  // ---------- language definitions ----------
+  const L = {};
+  const cStrings = (extra) => [str('"', '"'), ...(extra || [])];
+  function cFamily(o) {
+    o = o || {};
+    return [
+      ...(o.pre || []),
+      line('//', { doc: cDocLine, cont: !!o.cont }),
+      block('/*', '*/', { nest: !!o.nest, doc: cDocBlock }),
+      ...(o.strings || cStrings([charLit])),
+      ident(o.identExtra),
+    ];
+  }
+
+  L.c = { label: 'C', rules: () => cFamily({ cont: true }) };
+  L.cpp = { label: 'C++', rules: () => cFamily({ cont: true, pre: [tagged(/(?:u8|u|U|L)?R"([^()\\\s]{0,16})\(/, (m) => ')' + m[1] + '"', 'str')] }) };
+  L.objc = { label: 'Objective-C', rules: () => cFamily({ cont: true, pre: [str('@"', '"')] }) };
+  L.csharp = { label: 'C#', rules: () => cFamily({ strings: [
+    tagged(/\$*"""/, () => '"""', 'str'),
+    rx(/\$*@\$*"(?:[^"]|"")*"/, 'str'), str('"', '"'), charLit] }) };
+  L.java = { label: 'Java', rules: () => cFamily({ strings: [str('"""', '"""', { multiline: true }), str('"', '"'), charLit] }) };
+  L.kotlin = { label: 'Kotlin', rules: () => cFamily({ nest: true, strings: [str('"""', '"""', { multiline: true, esc: null }), str('"', '"'), charLit] }) };
+  L.scala = { label: 'Scala', rules: () => cFamily({ nest: true, strings: [str('"""', '"""', { multiline: true, esc: null }), str('"', '"'), charLit] }) };
+  L.groovy = { label: 'Groovy / Gradle', rules: () => cFamily({ strings: [str('"""', '"""', { multiline: true }), str("'''", "'''", { multiline: true }), str('"', '"'), str("'", "'")] }) };
+  L.swift = { label: 'Swift', rules: () => cFamily({ nest: true, strings: [str('"""', '"""', { multiline: true }), str('"', '"')] }) };
+  L.dart = { label: 'Dart', rules: () => cFamily({ strings: [
+    rx(/r'''[\s\S]*?'''|r"""[\s\S]*?"""|r'[^'\n]*'|r"[^"\n]*"/, 'str'),
+    str('"""', '"""', { multiline: true }), str("'''", "'''", { multiline: true }), str('"', '"'), str("'", "'")] }) };
+  L.go = { label: 'Go', rules: () => cFamily({ strings: [str('"', '"'), str('`', '`', { esc: null, multiline: true }), charLit] }) };
+  L.rust = { label: 'Rust', rules: () => cFamily({ nest: true, pre: [tagged(/b?r(#*)"/, (m) => '"' + m[1], 'str')], strings: [str('"', '"', { multiline: true }), charLit] }) };
+  L.zig = { label: 'Zig', rules: () => [line('//', { doc: (s, i) => (s.startsWith('///', i) && s[i + 3] !== '/') || s.startsWith('//!', i) }), rx(/\\\\[^\n]*/, 'str'), str('"', '"'), charLit, ident()] };
+  L.solidity = { label: 'Solidity', rules: () => cFamily({ strings: [str('"', '"'), str("'", "'")] }) };
+  L.proto = { label: 'Protobuf', rules: () => cFamily({ strings: [str('"', '"'), str("'", "'")] }) };
+  L.jsonc = { label: 'JSON có comment (JSONC/JSON5)', rules: () => cFamily({ strings: [str('"', '"'), str("'", "'")] }) };
+  L.js = { label: 'JavaScript / JSX', rules: () => [
+    line('//', { doc: (s, i) => s.startsWith('///', i) && s[i + 3] !== '/' }),
+    block('/*', '*/', { doc: cDocBlock }),
+    str('"', '"'), str("'", "'"), jsTemplate, jsRegex, ident('$')] };
+  L.ts = { label: 'TypeScript / TSX', rules: L.js.rules };
+  L.php = { label: 'PHP', rules: () => phpOuter() };
+  L.css = { label: 'CSS', rules: () => [block('/*', '*/', { doc: cDocBlock }), str('"', '"'), str("'", "'"), ident('-')] };
+  L.scss = { label: 'SCSS / Less', rules: () => [
+    rx(/url\(\s*(?:"[^"\n]*"|'[^'\n]*'|[^)\n]*)\)/, 'str'),
+    line('//', { doc: (s, i) => s.startsWith('///', i) && s[i + 3] !== '/' }),
+    block('/*', '*/', { doc: cDocBlock }), str('"', '"'), str("'", "'"), ident('-')] };
+
+  L.python = { label: 'Python', bareDoc: true, pyPass: true, rules: () => [
+    line('#'), (s, i) => pyStrAt(s, i), ident()] };
+  L.julia = { label: 'Julia', bareDoc: true, rules: () => [
+    block('#=', '=#', { nest: true }), line('#'),
+    str('"""', '"""', { multiline: true }), str('"', '"', { multiline: true }), str('`', '`'),
+    rx(/'(?:\\.[^'\n]*|[^\\'\n])'/, 'str', (s, i, st) => !(st.lastSig === 'a' || /[)\]}'.]/.test(st.lastSig))),
+    ident('!')] };
+  L.r = { label: 'R', rules: () => [
+    line('#', { doc: (s, i) => s[i + 1] === "'" }),
+    str('"', '"', { multiline: true }), str("'", "'", { multiline: true }), str('`', '`'), ident('.')] };
+  L.ruby = { label: 'Ruby', rules: () => [
+    (s, i) => {
+      if (!s.startsWith('=begin', i) || !(i === 0 || s[i - 1] === '\n')) return null;
+      const r = /\n=end\b[^\n]*/g; r.lastIndex = i; const m = r.exec(s);
+      return { t: 'com', e: m ? m.index + m[0].length : s.length, doc: true };
+    },
+    rx(/\?#/, 'code'),
+    line('#'), str('"', '"', { multiline: true }), str("'", "'", { multiline: true }), str('`', '`', { multiline: true }),
+    ident('?!')] };
+  L.shell = { label: 'Shell (bash/zsh)', rules: () => [
+    heredocBody, heredocStart,
+    line('#', { wordStart: true }),
+    rx(/\$'(?:\\.|[^\\'])*'/, 'str'),
+    str("'", "'", { esc: null, multiline: true }), str('"', '"', { multiline: true }),
+    rx(/\\./, 'code'), ident()] };
+  L.powershell = { label: 'PowerShell', rules: () => [
+    block('<#', '#>', { doc: () => true }), line('#', { wordStart: true }),
+    tagged(/@"\r?\n/, () => '\n"@', 'str'), tagged(/@'\r?\n/, () => "\n'@", 'str'),
+    str('"', '"', { esc: '`', multiline: true }), str("'", "'", { esc: null, doubled: true, multiline: true }), ident('-')] };
+  L.batch = { label: 'Batch (.bat/.cmd)', rules: () => [
+    (s, i) => {
+      if (!atLineStart(s, i)) return null;
+      const r = /@?(?:rem(?=[\s]|$)|::)/iy; r.lastIndex = i; if (!r.exec(s)) return null;
+      return { t: 'com', e: eol(s, i) };
+    }, str('"', '"', { esc: null }), ident()] };
+  L.yaml = { label: 'YAML', rules: () => [
+    yamlBlock, line('#', { wsBefore: true }),
+    str('"', '"'), str("'", "'", { esc: null, doubled: true }), ident('-')] };
+  L.toml = { label: 'TOML', rules: () => [
+    line('#'), str('"""', '"""', { multiline: true }), str("'''", "'''", { esc: null, multiline: true }),
+    str('"', '"'), str("'", "'", { esc: null })] };
+  L.ini = { label: 'INI / .cfg / .conf', rules: () => [line('#', { lineStart: true }), line(';', { lineStart: true })] };
+  L.dockerfile = { label: 'Dockerfile', rules: () => [line('#', { lineStart: true })] };
+  L.makefile = { label: 'Makefile', rules: () => [line('#', { noBackslash: true })] };
+  L.nim = { label: 'Nim', rules: () => [
+    block('##[', ']##', { nest: true, doc: () => true }), block('#[', ']#', { nest: true }),
+    line('#', { doc: (s, i) => s[i + 1] === '#' }),
+    str('"""', '"""', { multiline: true, esc: null }), rx(/r"(?:[^"]|"")*"/, 'str'), str('"', '"'), charLit, ident()] };
+  L.elixir = { label: 'Elixir', rules: () => [
+    (s, i) => {
+      const r = /@(?:module|type)?doc[ \t]+(?:~[a-zA-Z]+)?("""|'''|"|')/y; r.lastIndex = i; const m = r.exec(s); if (!m) return null;
+      const q = m[1]; let j = i + m[0].length;
+      while (j < s.length) { if (s[j] === '\\') { j += 2; continue; } if (s.startsWith(q, j)) { j += q.length; break; } j++; }
+      return { t: 'com', e: Math.min(j, s.length), doc: true };
+    },
+    line('#'), rx(/~[a-zA-Z]+(?:"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\/(?:\\.|[^/\\])*\/|\|(?:\\.|[^|\\])*\||\((?:\\.|[^)\\])*\)|\[(?:\\.|[^\]\\])*\]|\{(?:\\.|[^}\\])*\}|<(?:\\.|[^>\\])*>)[a-zA-Z]*/, 'str'),
+    str('"""', '"""', { multiline: true }), str("'''", "'''", { multiline: true }),
+    str('"', '"', { multiline: true }), str("'", "'", { multiline: true }), rx(/\?./, 'code'), ident('?!')] };
+  L.sql = { label: 'SQL', rules: () => [
+    block('/*!', '*/', { as: 'code' }),
+    line('--', { doc: () => false }), line('#', { notNext: /[>\-#&|]/ }),
+    block('/*', '*/'),
+    tagged(/\$([A-Za-z_][A-Za-z0-9_]*)?\$/, (m) => m[0], 'str'),
+    str("'", "'", { multiline: true }), str('"', '"', { multiline: true }), str('`', '`', { esc: null }), str('[', ']', { esc: null }),
+    ident()] };
+  L.lua = { label: 'Lua', rules: () => [
+    tagged(/--\[(=*)\[/, (m) => ']' + m[1] + ']', 'com'),
+    line('--', { doc: (s, i) => s[i + 2] === '-' }),
+    tagged(/\[(=*)\[/, (m) => ']' + m[1] + ']', 'str'),
+    str('"', '"'), str("'", "'"), ident()] };
+  const hsLine = rx(/--+(?![!#$%&*+./<=>?@\\^|~:])[^\n]*/, 'com');
+  L.haskell = { label: 'Haskell', rules: () => [
+    block('{-#', '#-}', { as: 'code' }),
+    block('{-', '-}', { nest: true, doc: (s, i) => s[i + 2] === '|' }),
+    (s, i, st) => { const m = hsLine(s, i, st); if (m) m.doc = /^--\s*[|^]/.test(s.slice(i, m.e)); return m; },
+    str('"', '"'), charLit, ident("'")] };
+  L.matlab = { label: 'MATLAB / Octave', rules: () => [
+    (s, i) => {
+      if (!s.startsWith('%{', i) || !atLineStart(s, i) || s.slice(i + 2, eol(s, i)).trim() !== '') return null;
+      const r = /\n[ \t]*%\}[ \t]*(?=\n|$)/g; r.lastIndex = i; const m = r.exec(s);
+      return { t: 'com', e: m ? m.index + m[0].length : s.length };
+    },
+    line('%'), rx(/\.\.\.[^\n]*/, 'com'),
+    str('"', '"', { esc: null, doubled: true }),
+    rx(/'(?:[^'\n]|'')*'/, 'str', (s, i, st) => !(st.lastSig === 'a' || /[)\]}'.]/.test(st.lastSig))),
+    ident()] };
+  L.latex = { label: 'LaTeX', rules: () => [
+    rx(/\\begin\{(verbatim\*?|lstlisting|minted|Verbatim)\}[\s\S]*?\\end\{\1\}/, 'str'),
+    rx(/\\begin\{comment\}[\s\S]*?\\end\{comment\}/, 'com'),
+    rx(/\\verb\*?([^A-Za-z\s*])[^\n]*?\1/, 'str'),
+    rx(/\\(?:url|href)\{[^}\n]*\}/, 'str'),
+    rx(/\\[%\\]/, 'code'),
+    line('%')] };
+  L.fortran = { label: 'Fortran', rules: () => [
+    line('!', { doc: (s, i) => s[i + 1] === '>' || s[i + 1] === '!' }),
+    str('"', '"', { esc: null, doubled: true }), str("'", "'", { esc: null, doubled: true }), ident()] };
+  L.lisp = { label: 'Lisp / Clojure / Racket', rules: () => [
+    block('#|', '|#', { nest: true }),
+    line(';', { doc: (s, i) => s.startsWith(';;;', i) }),
+    rx(/\\(?:newline|space|tab|.)/, 'code'),
+    str('"', '"', { multiline: true }), ident('\\-!?*<>=+/.:')] };
+  L.vb = { label: 'Visual Basic / VBA', rules: () => [
+    line("'", { doc: (s, i) => s.startsWith("'''", i) }),
+    rx(/\bREM\b[^\n]*/i, 'com', (s, i) => atLineStart(s, i) || /:\s*$/.test(s.slice(s.lastIndexOf('\n', i - 1) + 1, i))),
+    str('"', '"', { esc: null, doubled: true }), ident()] };
+  L.html = { label: 'HTML / XML / Vue / Svelte', rules: () => htmlRules() };
+  L.ipynb = { label: 'Jupyter Notebook (.ipynb)', notebook: true };
+
+  // HTML with embedded script/style elements
+  function htmlRules(extra) {
+    return [
+      ...(extra || []),
+      block('\x3c!--', '-->'),
+      rx(/<!\[CDATA\[[\s\S]*?\]\]>/, 'str'),
+      (src, i) => {
+        const r = /<(script|style)\b([^>]*)>/iy; r.lastIndex = i; const m = r.exec(src); if (!m) return null;
+        const tag = m[1].toLowerCase(), attrs = m[2];
+        const cs = i + m[0].length;
+        const close = new RegExp('</' + tag + '\\s*>', 'ig'); close.lastIndex = cs;
+        const cm = close.exec(src); const ce = cm ? cm.index : src.length;
+        let lang;
+        if (tag === 'style') lang = /lang\s*=\s*["']?(scss|sass|less)/i.test(attrs) ? 'scss' : 'css';
+        else if (/type\s*=\s*["']?(application\/(ld\+)?json|importmap)/i.test(attrs)) lang = 'jsonc';
+        else if (/type\s*=\s*["']?text\/(x-template|html|template)/i.test(attrs)) lang = 'html';
+        else lang = 'js';
+        const content = src.slice(cs, ce);
+        const sub = run(content, L[lang].rules(), cs).segs;
+        return { segs: [{ t: 'code', s: i, e: cs }, ...sub.map((s) => ({ ...s, lang }))], e: ce };
+      },
+    ];
+  }
+  function phpCoreRules(stop) {
+    return [
+      line('//', { doc: cDocLine, stopAt: stop }),
+      line('#', { notNext: /\[/, stopAt: stop }),
+      block('/*', '*/', { doc: cDocBlock }),
+      tagged(/<<<[ \t]*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1\r?\n/, (m) => '\n' + m[2], 'str'),
+      str('"', '"', { multiline: true }), str("'", "'", { multiline: true }), str('`', '`', { multiline: true }),
+      ident('$')];
+  }
+  function phpOuter() {
+    return htmlRules([(src, i) => {
+      const r = /<\?(?:php\b|=)?/iy; r.lastIndex = i; const m = r.exec(src);
+      if (!m || /^<\?xml/i.test(src.slice(i, i + 5))) return null;
+      const cs = i + m[0].length;
+      const res = run(src.slice(cs), phpCoreRules('?>'), cs, '?>');
+      const ce = Math.min(src.length, res.end + cs);
+      return { segs: [{ t: 'code', s: i, e: cs }, ...res.segs.map((s) => ({ ...s, lang: 'php' }))], e: ce };
+    }]);
+  }
+
+  // ---------- directives that should be kept ----------
+  const DIRECTIVES = {
+    python: /^#\s*(type:|noqa|pylint:|pyright:|mypy:|pragma\b|fmt:|isort:|nosec|ruff:|pyre-|flake8:)/,
+    julia: /^#\s*(jl:|format:)/,
+    r: /^#\s*(nolint|nocov|\$\s*\w)/,
+    shell: /^#\s*shellcheck\b/,
+    js: /^(\/\/\/\s*<(reference|amd)|\/[\/*]\s*(eslint|@ts-|prettier-ignore|istanbul\b|c8\b|v8\b|jshint|jslint|global\s|globals\s|exported\s|webpack[A-Z]|@vite-ignore|[#@]\s*source(Mapping)?URL|@jsx|@jsxImportSource|@jsxRuntime|@flow|@license|@preserve|biome-ignore|deno-lint|deno-fmt|oxlint|tslint|@vue\/)|\/\*!)/,
+    css: /^\/\*(!|\s*(stylelint|prettier-ignore|@license|purgecss|autoprefixer|rtl:))/,
+    scss: /^(\/\*!|\/[\/*]\s*(stylelint|prettier-ignore|@license|purgecss))/,
+    go: /^\/\/(go:|line |export |extern |nolint|lint:|\s*\+build)/,
+    c: /(NOLINT|clang-format (on|off)|cppcheck-suppress|LCOV_EXCL|IWYU pragma|coverity\[|lint -|PRQA)/,
+    csharp: /(ReSharper (disable|restore)|<auto-generated|@formatter:|dotcover)/,
+    java: /(CHECKSTYLE|NOSONAR|@formatter:|noinspection|language=|ktlint-disable|ktlint-enable|detekt)/,
+    rust: /^\/\/\s*(rustfmt::|@generated)/,
+    php: /^(\/\/|#|\/\*)\s*(phpcs:|@phpstan-|@psalm-|@codingStandards|phpcs)/,
+    sql: /^\/\*\+/,
+    html: /^\x3c!--\s*(\[if|<!\[endif|#(include|echo|set|config|exec|if|else|endif|elif)|prettier-ignore|htmlhint|svelte-ignore|eslint-)/,
+    haskell: /^(--\s*hlint:|\{-\s*HLINT)/,
+    yaml: /^#\s*(yaml-language-server:|yamllint|@schema|cloud-config|prettier-ignore)/,
+    dockerfile: /^#\s*(syntax|escape|check)\s*=/,
+    latex: /^%\s*(!TEX|!TeX|arara:|!BIB)/,
+    matlab: /^%#(ok|function)/,
+    lua: /^---\s*@diagnostic/,
+    powershell: /^#\s*requires\b/i,
+  };
+  const DIR_ALIAS = { ts: 'js', cpp: 'c', objc: 'c', kotlin: 'java', scala: 'java', groovy: 'java', swift: 'c', dart: 'js', jsonc: 'js', solidity: 'c', proto: 'c', zig: 'c' };
+  const SPDX = /SPDX-License-Identifier|@license\b/;
+
+  function isDirective(text, lang, src, s, lineNo) {
+    if (lineNo === 1 && text.startsWith('#!')) return 'always';
+    if ((lang === 'python' || lang === 'ruby') && lineNo <= 2 && /^#.*coding[:=]/.test(text)) return 'always';
+    if (lang === 'ruby' && /^#\s*frozen_string_literal:/.test(text)) return 'opt';
+    if (lang === 'go') {
+      // cgo preamble: comment right before import "C"
+      const after = src.slice(s + text.length, s + text.length + 40);
+      if (/^\s*import\s+"C"/.test(after)) return 'always';
+    }
+    if (SPDX.test(text)) return 'opt';
+    const re = DIRECTIVES[lang] || DIRECTIVES[DIR_ALIAS[lang]];
+    if (re && re.test(text)) return 'opt';
+    return null;
+  }
+
+  // ---------- Python/Julia: bare string statements = docstrings ----------
+  function logicalLines(src, segs) {
+    const lines = [];
+    let cur = { items: [], start: 0, hasCode: false, hasStr: false };
+    let depth = 0;
+    const push = (np) => { lines.push(cur); cur = { items: [], start: np, hasCode: false, hasStr: false }; };
+    segs.forEach((g, k) => {
+      if (g.t === 'code') {
+        for (let p = g.s; p < g.e; p++) {
+          const c = src[p];
+          if (c === '(' || c === '[' || c === '{') depth++;
+          else if (c === ')' || c === ']' || c === '}') depth = Math.max(0, depth - 1);
+          if (c === '\n') {
+            if (depth === 0 && !(p - 1 >= g.s && src[p - 1] === '\\')) push(p + 1);
+          } else if (!WS.test(c) && c !== ';' && !(c === '\\' && src[p + 1] === '\n')) cur.hasCode = true;
+          else if (c === ';') cur.hasCode = true;
+        }
+      } else if (g.t === 'str') { cur.items.push(k); cur.hasStr = true; }
+    });
+    lines.push(cur);
+    for (const ln of lines) {
+      let col = 0, p = ln.start;
+      while (p < src.length && (src[p] === ' ' || src[p] === '\t')) { col += src[p] === '\t' ? 8 - (col % 8) : 1; p++; }
+      ln.indent = col;
+      ln.kind = ln.hasStr && !ln.hasCode ? 'doc' : (ln.hasCode || ln.hasStr ? 'code' : 'blank');
+    }
+    return lines;
+  }
+
+  // ---------- main ----------
+  function lineNoAt(src, pos, cache) {
+    // cache: array of newline positions
+    let lo = 0, hi = cache.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (cache[mid] < pos) lo = mid + 1; else hi = mid; }
+    return lo + 1;
+  }
+
+  function analyze(src, lang) {
+    const def = L[lang];
+    if (!def || def.notebook) throw new Error('Ngôn ngữ không hỗ trợ: ' + lang);
+    const { segs } = run(src, def.rules(), 0);
+    const nl = []; for (let p = 0; p < src.length; p++) if (src[p] === '\n') nl.push(p);
+    let lines = null;
+    if (def.bareDoc) {
+      lines = logicalLines(src, segs);
+      for (const ln of lines) if (ln.kind === 'doc') for (const k of ln.items) { segs[k].t = 'com'; segs[k].doc = true; segs[k].bare = true; }
+    }
+    for (const g of segs) {
+      if (g.t !== 'com') continue;
+      const text = src.slice(g.s, g.e);
+      g.line = lineNoAt(src, g.s, nl);
+      g.endLine = lineNoAt(src, Math.max(g.s, g.e - 1), nl);
+      g.dir = g.bare ? null : isDirective(text, g.lang || lang, src, g.s, g.line);
+    }
+    return { segs, lines };
+  }
+
+  // what to leave in place of a removed inline comment so neighbouring tokens don't fuse
+  function joiner(prev, next, text, lang) {
+    if (!prev || !next || prev === '\u0000' || WS.test(prev) || WS.test(next)) return '';
+    if (text.startsWith('\x3c!--') || lang === 'css' || lang === 'scss' || lang === 'html') return '';
+    if ((lang === 'js' || lang === 'ts') && text.includes('\n')) return '\n';
+    return ' ';
+  }
+
+  const DEFAULTS = { comments: true, docs: true, keepDirectives: true, collapse: true };
+
+  function willRemove(g, o) {
+    if (g.t !== 'com') return false;
+    if (g.dir === 'always') return false;
+    if (g.dir === 'opt' && o.keepDirectives) return false;
+    return g.doc ? o.docs : o.comments;
+  }
+
+  function strip(src0, lang, opts) {
+    const o = { ...DEFAULTS, ...(opts || {}) };
+    const crlf = /\r\n/.test(src0);
+    const src = src0.replace(/\r\n?/g, '\n');
+    const { segs, lines } = analyze(src, lang);
+
+    // Python: removing a docstring may leave a block empty → insert `pass`
+    if (L[lang].pyPass && lines && o.docs) {
+      const removedLine = (ln) => ln.kind === 'doc' && ln.items.every((k) => willRemove(segs[k], o));
+      const isCode = (ln) => ln.kind === 'code' || (ln.kind === 'doc' && !removedLine(ln)) || ln.pass;
+      for (let a = 0; a < lines.length; a++) {
+        const ln = lines[a];
+        if (!removedLine(ln) || ln.indent === 0) continue;
+        let prev = null; for (let b = a - 1; b >= 0; b--) if (isCode(lines[b])) { prev = lines[b]; break; }
+        if (prev && prev.indent >= ln.indent) continue;
+        let has = false;
+        for (let b = a + 1; b < lines.length; b++) {
+          const x = lines[b];
+          if (!isCode(x)) continue;
+          has = x.indent >= ln.indent; break;
+        }
+        if (!has) { ln.pass = true; segs[ln.items[0]].pass = true; }
+      }
+    }
+
+    let out = '';
+    const stats = { comments: 0, docs: 0, kept: 0, linesBefore: 0, linesAfter: 0 };
+    for (const g of segs) {
+      const text = src.slice(g.s, g.e);
+      if (g.pass) { out += 'pass'; stats.docs++; continue; }
+      if (willRemove(g, o)) {
+        if (g.doc) stats.docs++; else stats.comments++;
+        out += joiner(out[out.length - 1], src[g.e], text, g.lang || lang) + '\u0000';
+      } else {
+        if (g.t === 'com' && g.dir) stats.kept++;
+        out += text;
+      }
+    }
+
+    const endsNl = out.endsWith('\n');
+    const raw = (endsNl ? out.slice(0, -1) : out).split('\n');
+    const res = [];
+    let dropped = false;
+    for (let a = 0; a < raw.length; a++) {
+      const ln = raw[a];
+      if (ln.includes('\u0000')) {
+        const clean = ln.replace(/\u0000/g, '');
+        if (clean.trim() === '') { dropped = true; continue; }
+        res.push(clean.replace(/[ \t]+$/, ''));
+        dropped = false; continue;
+      }
+      if (o.collapse && dropped && ln.trim() === '') {
+        // blank run right after removed lines: keep max(blank before, blank after)
+        let after = 0; while (a + after < raw.length && raw[a + after].trim() === '' && !raw[a + after].includes('\u0000')) after++;
+        let before = 0; while (before < res.length && res[res.length - 1 - before].trim() === '') before++;
+        const last = res[res.length - before - 1];
+        const atEnd = a + after >= raw.length;
+        let keep = Math.max(0, after - before);
+        if (!res.length || last === undefined || /[:{(\[]\s*$/.test(last) || atEnd) keep = 0;
+        for (let k = 0; k < keep; k++) res.push('');
+        a += after - 1; dropped = false; continue;
+      }
+      dropped = false;
+      res.push(ln);
+    }
+    let text = res.join('\n') + (endsNl && res.length ? '\n' : '');
+    if (crlf) text = text.replace(/\n/g, '\r\n');
+    stats.linesBefore = src.split('\n').length - (src.endsWith('\n') ? 1 : 0);
+    stats.linesAfter = res.length;
+    return { text, stats, segs, src };
+  }
+
+  function extract(src0, lang, opts) {
+    const o = { ...DEFAULTS, ...(opts || {}) };
+    const src = src0.replace(/\r\n?/g, '\n');
+    const { segs } = analyze(src, lang);
+    const items = [];
+    const stats = { comments: 0, docs: 0, kept: 0 };
+    for (const g of segs) {
+      if (g.t !== 'com') continue;
+      if (!willRemove(g, o)) { if (g.dir) stats.kept++; continue; }
+      if (g.doc) stats.docs++; else stats.comments++;
+      items.push({ line: g.line, endLine: g.endLine, doc: !!g.doc, text: src.slice(g.s, g.e) });
+    }
+    return { items, stats, segs, src };
+  }
+
+  function formatItems(items, lineOffset, header) {
+    const out = [];
+    if (header) out.push(header);
+    const tags = items.map((it) => { const a = it.line + (lineOffset || 0), b = it.endLine + (lineOffset || 0); return 'L' + (a === b ? a : a + '–' + b); });
+    const w = Math.max(0, ...tags.map((t) => t.length));
+    items.forEach((it, k) => {
+      const tag = tags[k].padEnd(w);
+      const lines = it.text.split('\n');
+      const rest = lines.slice(1);
+      const ind = Math.min(...rest.filter((l) => l.trim()).map((l) => /^[ \t]*/.exec(l)[0].length), 1e9);
+      const pad = ' '.repeat(w + 3);
+      out.push(tag + (it.doc ? ' ◆ ' : ' │ ') + lines[0] + rest.map((l) => '\n' + pad + l.slice(ind === 1e9 ? 0 : ind)).join(''));
+    });
+    return out.join('\n');
+  }
+
+  // ---------- notebooks ----------
+  const NB_MAGIC = { sql: 'sql', bash: 'shell', sh: 'shell', script: 'shell', html: 'html', javascript: 'js', js: 'js', latex: 'latex', ruby: 'ruby', r: 'r', R: 'r', writefile: null, capture: 'python', time: 'python', timeit: 'python' };
+  function nbLang(nb) {
+    const l = ((nb.metadata && ((nb.metadata.kernelspec && nb.metadata.kernelspec.language) || (nb.metadata.language_info && nb.metadata.language_info.name))) || 'python').toLowerCase();
+    return { python: 'python', r: 'r', julia: 'julia', scala: 'scala', sql: 'sql', javascript: 'js', typescript: 'ts', 'c++': 'cpp', cpp: 'cpp', c: 'c', ruby: 'ruby', bash: 'shell', go: 'go', rust: 'rust', java: 'java', 'c#': 'csharp', matlab: 'matlab', octave: 'matlab', haskell: 'haskell', lua: 'lua' }[l] || 'python';
+  }
+  function cellLang(src, def) {
+    const m = /^%%(\w+)([^\n]*)/.exec(src);
+    if (!m) return { lang: def, head: 0 };
+    if (m[1] === 'writefile') {
+      const f = (m[2].trim().split(/\s+/).pop() || '');
+      return { lang: langFromName(f) || 'none', head: m[0].length };
+    }
+    const lg = NB_MAGIC[m[1]];
+    return { lang: lg === undefined ? 'none' : (lg || 'none'), head: m[0].length };
+  }
+  function processNotebook(text, opts, mode) {
+    const o = { ...DEFAULTS, ...(opts || {}) };
+    let nb;
+    try { nb = JSON.parse(text); } catch (e) { throw new Error('File .ipynb không phải JSON hợp lệ.'); }
+    if (!Array.isArray(nb.cells)) throw new Error('Không tìm thấy danh sách cell trong notebook.');
+    const def = nbLang(nb);
+    const stats = { comments: 0, docs: 0, kept: 0, linesBefore: 0, linesAfter: 0, cells: nb.cells.length, removedCells: 0 };
+    const view = [], extractOut = [], marks = [];
+    const keep = [];
+    nb.cells.forEach((c, idx) => {
+      const src = Array.isArray(c.source) ? c.source.join('') : (c.source || '');
+      const head = `# ── ô ${idx + 1} · ${c.cell_type} ──`;
+      if (c.cell_type !== 'code') {
+        if (c.cell_type === 'markdown' && o.nbDropMarkdown && mode === 'strip') { stats.removedCells++; marks.push({ head, src, segs: [{ t: 'com', s: 0, e: src.length, doc: true }] }); return; }
+        keep.push(c); view.push(head + '\n' + src); marks.push({ head, src, segs: [{ t: 'code', s: 0, e: src.length }] });
+        return;
+      }
+      const cl = cellLang(src, def);
+      if (cl.lang === 'none') { keep.push(c); view.push(head + '\n' + src); marks.push({ head, src, segs: [{ t: 'code', s: 0, e: src.length }] }); return; }
+      const pre = src.slice(0, cl.head), body = src.slice(cl.head);
+      if (mode === 'extract') {
+        const r = extract(body, cl.lang, o);
+        for (const k of ['comments', 'docs', 'kept']) stats[k] += r.stats[k];
+        if (r.items.length) extractOut.push(formatItems(r.items, 0, `── ô ${idx + 1} ──`));
+        marks.push({ head, src: pre + body, segs: [{ t: 'code', s: 0, e: pre.length }, ...r.segs.map((g) => ({ ...g, s: g.s + pre.length, e: g.e + pre.length }))] });
+        keep.push(c);
+        return;
+      }
+      const r = strip(body, cl.lang, o);
+      for (const k of ['comments', 'docs', 'kept', 'linesBefore', 'linesAfter']) stats[k] += r.stats[k];
+      const ns = pre + r.text;
+      marks.push({ head, src: pre + r.src, segs: [{ t: 'code', s: 0, e: pre.length }, ...r.segs.map((g) => ({ ...g, s: g.s + pre.length, e: g.e + pre.length }))] });
+      const parts = ns.split(/(?<=\n)/);
+      c.source = Array.isArray(c.source) ? parts : ns;
+      if (o.nbClearOutputs) { c.outputs = []; c.execution_count = null; }
+      keep.push(c);
+      view.push(head + '\n' + ns.replace(/\n+$/, ''));
+    });
+    nb.cells = keep;
+    return {
+      text: mode === 'extract' ? extractOut.join('\n\n') : JSON.stringify(nb, null, 1) + '\n',
+      view: mode === 'extract' ? extractOut.join('\n\n') : view.join('\n\n'),
+      stats, marks, kernel: def,
+    };
+  }
+
+  // ---------- language detection ----------
+  const EXT = {
+    py: 'python', pyw: 'python', pyi: 'python', jl: 'julia', r: 'r', rmd: 'r', rb: 'ruby', rake: 'ruby', gemspec: 'ruby',
+    sh: 'shell', bash: 'shell', zsh: 'shell', ksh: 'shell', fish: 'shell', ps1: 'powershell', psm1: 'powershell', bat: 'batch', cmd: 'batch',
+    yml: 'yaml', yaml: 'yaml', toml: 'toml', ini: 'ini', cfg: 'ini', conf: 'ini', properties: 'ini', env: 'ini',
+    c: 'c', h: 'c', cpp: 'cpp', cc: 'cpp', cxx: 'cpp', hpp: 'cpp', hh: 'cpp', hxx: 'cpp', ino: 'cpp', cu: 'cpp', mm: 'objc',
+    cs: 'csharp', java: 'java', kt: 'kotlin', kts: 'kotlin', scala: 'scala', sc: 'scala', groovy: 'groovy', gradle: 'groovy',
+    swift: 'swift', go: 'go', rs: 'rust', dart: 'dart', zig: 'zig', sol: 'solidity', proto: 'proto',
+    js: 'js', mjs: 'js', cjs: 'js', jsx: 'js', ts: 'ts', tsx: 'ts', mts: 'ts', cts: 'ts', json5: 'jsonc', jsonc: 'jsonc',
+    php: 'php', phtml: 'php', css: 'css', scss: 'scss', sass: 'scss', less: 'scss',
+    sql: 'sql', psql: 'sql', mysql: 'sql', lua: 'lua', hs: 'haskell', lhs: 'haskell', m: 'matlab', tex: 'latex', sty: 'latex', cls: 'latex', bib: 'latex',
+    f: 'fortran', f90: 'fortran', f95: 'fortran', f03: 'fortran', for: 'fortran',
+    clj: 'lisp', cljs: 'lisp', cljc: 'lisp', edn: 'lisp', el: 'lisp', lisp: 'lisp', scm: 'lisp', rkt: 'lisp',
+    vb: 'vb', bas: 'vb', vbs: 'vb', cls_vb: 'vb', nim: 'nim', ex: 'elixir', exs: 'elixir',
+    html: 'html', htm: 'html', xhtml: 'html', xml: 'html', svg: 'html', vue: 'html', svelte: 'html', xaml: 'html', csproj: 'html', plist: 'html',
+    ipynb: 'ipynb', mk: 'makefile',
+  };
+  const NAMES = { dockerfile: 'dockerfile', makefile: 'makefile', gnumakefile: 'makefile', rakefile: 'ruby', gemfile: 'ruby', '.bashrc': 'shell', '.zshrc': 'shell', '.profile': 'shell', '.gitignore': 'ini', '.editorconfig': 'ini', 'cmakelists.txt': 'shell' };
+  function langFromName(name) {
+    const base = (name || '').split(/[\\/]/).pop().toLowerCase();
+    if (NAMES[base]) return NAMES[base];
+    if (/^dockerfile/.test(base) || /\.dockerfile$/.test(base)) return 'dockerfile';
+    const m = /\.([a-z0-9_]+)$/.exec(base);
+    return m ? EXT[m[1]] || null : null;
+  }
+  function detect(text) {
+    const t = text.slice(0, 20000);
+    const sb = /^#!.*\b(python|bash|sh|zsh|node|ruby|Rscript|julia|lua|php)\b/.exec(t);
+    if (sb) return { python: 'python', bash: 'shell', sh: 'shell', zsh: 'shell', node: 'js', ruby: 'ruby', Rscript: 'r', julia: 'julia', lua: 'lua', php: 'php' }[sb[1]];
+    if (/^\s*\{\s*"cells"\s*:/.test(t) && /"nbformat"/.test(t)) return 'ipynb';
+    if (/<\?php/.test(t)) return 'php';
+    const score = {};
+    const add = (l, re, w) => { const m = t.match(re); if (m) score[l] = (score[l] || 0) + (w || 1) * Math.min(m.length, 5); };
+    add('python', /^\s*(def|class)\s+\w+[^\n]*:\s*$/gm, 3); add('python', /^\s*(from\s+[\w.]+\s+)?import\s+[\w.]+(\s+as\s+\w+)?\s*$/gm, 2); add('python', /"""|'''/g, 1); add('python', /\bself\b|\bNone\b|\belif\b|print\(/g, 1);
+    add('sql', /\b(SELECT|INSERT\s+INTO|CREATE\s+(TABLE|DATABASE|VIEW|PROCEDURE)|ALTER\s+TABLE|UPDATE\s+\w+\s+SET|DELETE\s+FROM|PRIMARY\s+KEY|FOREIGN\s+KEY|VARCHAR)\b/gi, 3);
+    add('cpp', /#include\s*<(iostream|vector|string|bits\/stdc\+\+\.h|algorithm|map)>|\bstd::|\bcout\b|\bcin\b|using namespace std/g, 3);
+    add('c', /#include\s*<(stdio|stdlib|string|math)\.h>|\bprintf\s*\(|\bscanf\s*\(|\bmalloc\s*\(/g, 3);
+    add('java', /\bpublic\s+(static\s+)?(class|void|interface)\b|System\.out\.print|\bimport\s+java\./g, 3);
+    add('csharp', /\busing\s+System\b|\bnamespace\s+\w+|Console\.Write/g, 3);
+    add('js', /\b(const|let)\s+\w+\s*=|=>|\bfunction\s+\w*\s*\(|console\.log|require\(|document\.|module\.exports/g, 2);
+    add('ts', /:\s*(string|number|boolean|any|void)\b|\binterface\s+\w+\s*\{|\btype\s+\w+\s*=/g, 3);
+    add('go', /^package\s+\w+|\bfunc\s+(\(\w+\s+\*?\w+\)\s*)?\w+\(|fmt\.Print/gm, 3);
+    add('rust', /\bfn\s+\w+|\blet\s+mut\b|println!|\bimpl\b|::new\(/g, 3);
+    add('html', /<(!DOCTYPE|html|head|body|div|span|p|a|template|script)\b/gi, 2);
+    add('css', /^[.#]?[\w-]+(\s*[,>+~]\s*[.#]?[\w-]+)*\s*\{[^}]*:[^}]*\}/gm, 2);
+    add('shell', /^\s*(echo|export|fi|done|then|esac)\b|\$\{\w+\}|\[\[ /gm, 2);
+    add('r', /<-|\blibrary\(|\bfunction\s*\(|data\.frame|ggplot\(/g, 2);
+    add('ruby', /^\s*(def\s+\w+|end|require\s+['"]|puts\s)/gm, 1);
+    add('lua', /\blocal\s+\w+|\bthen\b|\bend\b|--\[\[/g, 1);
+    add('matlab', /^\s*(function\s+.*=|disp\(|fprintf\(|zeros\(|plot\()|\]'|^\s*%[^%{]/gm, 2);
+    add('latex', /\\(documentclass|begin|section|usepackage)\{/g, 3);
+    add('yaml', /^\s*[\w-]+:\s*(\S.*)?$/gm, 0.5);
+    add('kotlin', /\bfun\s+\w+\(|\bval\s+\w+\s*[:=]/g, 3);
+    add('swift', /\bfunc\s+\w+\(|\bvar\s+\w+\s*:\s*\w+|\bguard\s+let\b/g, 2);
+    add('haskell', /^\w+\s*::\s*[\w\[(]|^module\s+\w+.*where/gm, 3);
+    add('php', /\$\w+\s*=|->\w+\(|echo\s/g, 1);
+    let best = null, bv = 0;
+    for (const k in score) if (score[k] > bv) { bv = score[k]; best = k; }
+    if (best === 'c' && score.cpp) best = 'cpp';
+    if (best === 'js' && (score.ts || 0) >= 3) best = 'ts';
+    return best || 'python';
+  }
+
+  const api = { L, strip, extract, willRemove, formatItems, processNotebook, detect, langFromName, analyze, DEFAULTS };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.Stripper = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+(() => {
+'use strict';
+const S = window.Stripper;
+const $ = (id) => document.getElementById(id);
+
+const SAMPLE = `#!/usr/bin/env python3
+"""Tính điểm trung bình học phần.
+
+Module mẫu để thử bộ lọc.
+"""
+import math  # noqa: F401
+
+URL = "https://uet.vnu.edu.vn/#dao-tao"   # dấu # trong chuỗi được giữ nguyên
+
+
+class SinhVien:
+    """Một sinh viên với danh sách điểm."""
+
+    def __init__(self, ten, diem):
+        # lưu thông tin
+        self.ten = ten
+        self.diem = diem  # list[float]
+
+    def trung_binh(self) -> float:
+        """Trả về điểm trung bình, làm tròn 2 chữ số."""
+        return round(sum(self.diem) / len(self.diem), 2)
+
+    def xep_loai(self):
+        """Chưa cài đặt."""
+
+
+if __name__ == "__main__":
+    sv = SinhVien("Kiến Anh", [8.5, 9, 7.75])
+    print(sv.trung_binh())  # 8.42
+`;
+
+const LANG_ORDER = Object.keys(S.L).sort((a, b) => S.L[a].label.localeCompare(S.L[b].label, 'vi'));
+
+// ---------- state ----------
+const state = {
+  mode: 'strip', view: 'out',
+  opts: { comments: true, docs: true, keepDirectives: true, collapse: true, nbDropMarkdown: false, nbClearOutputs: false },
+  items: [{ id: 'paste', name: 'Đoạn dán', path: '', text: SAMPLE, lang: 'auto' }],
+  active: 'paste',
+};
+let seq = 0;
+const restore = (data) => {
+  if (!data || typeof data !== 'object') return;
+  if (data.mode) state.mode = data.mode;
+  if (data.view) state.view = data.view;
+  if (data.opts) Object.assign(state.opts, data.opts);
+  if (typeof data.paste === 'string') state.items[0].text = data.paste;
+  if (data.pasteLang) state.items[0].lang = data.pasteLang;
+};
+const snapshot = () => ({ mode: state.mode, view: state.view, opts: state.opts, paste: state.items[0].text.slice(0, 200000), pasteLang: state.items[0].lang });
+try { restore(JSON.parse(localStorage.getItem('strip-tool') || 'null')); } catch (e) {}
+const save = () => { try { localStorage.setItem('strip-tool', JSON.stringify(snapshot())); } catch (e) {} };
+
+const cur = () => state.items.find((x) => x.id === state.active) || state.items[0];
+function effLang(it) {
+  if (it.lang && it.lang !== 'auto') return it.lang;
+  return S.langFromName(it.name) || S.detect(it.text);
+}
+
+// ---------- processing ----------
+function process(it, mode) {
+  const lang = effLang(it);
+  const o = state.opts;
+  if (lang === 'ipynb') {
+    const r = S.processNotebook(it.text, o, mode);
+    return { lang, out: r.text, view: r.view, stats: r.stats, marks: r.marks, notebook: true, kernel: r.kernel };
+  }
+  if (mode === 'extract') {
+    const r = S.extract(it.text, lang, o);
+    return { lang, out: S.formatItems(r.items), view: null, stats: r.stats, marks: [{ src: r.src, segs: r.segs, lang }] };
+  }
+  const r = S.strip(it.text, lang, o);
+  return { lang, out: r.text, view: null, stats: r.stats, marks: [{ src: r.src, segs: r.segs, lang }] };
+}
+
+const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+function markHTML(marks, isNb) {
+  const o = state.opts;
+  const parts = [];
+  for (const m of marks) {
+    if (isNb && m.head) parts.push('<span class="m-cell">' + esc(m.head) + '</span>\n');
+    for (const g of m.segs) {
+      const text = m.src.slice(g.s, g.e);
+      if (g.t !== 'com') { parts.push(esc(text)); continue; }
+      const cls = S.willRemove(g, o) ? (g.doc ? 'm-doc' : 'm-del') : (g.dir ? 'm-keep' : '');
+      parts.push(cls ? '<span class="' + cls + '">' + esc(text) + '</span>' : esc(text));
+    }
+    if (isNb) parts.push('\n\n');
+  }
+  return parts.join('');
+}
+
+let last = null;
+function render() {
+  const it = cur();
+  const srcEl = $('src');
+  if (srcEl.value !== it.text) srcEl.value = it.text;
+  const lang = effLang(it);
+  // language select
+  const sel = $('lang');
+  sel.options[0].textContent = 'Tự nhận diện · ' + (S.L[(S.langFromName(it.name) || S.detect(it.text))] || { label: '?' }).label;
+  sel.value = it.lang || 'auto';
+  document.querySelectorAll('.nbonly').forEach((el) => { el.hidden = lang !== 'ipynb'; });
+  $('optNbMd').closest('.chip').hidden = lang !== 'ipynb' || state.mode === 'extract';
+  $('optNbOut').closest('.chip').hidden = lang !== 'ipynb' || state.mode === 'extract';
+
+  const stats = $('stats');
+  let r;
+  try { r = process(it, state.mode); }
+  catch (e) {
+    last = null;
+    stats.innerHTML = '<span class="stat err">' + esc(e.message || String(e)) + '</span>';
+    $('out').textContent = '';
+    return;
+  }
+  last = r;
+  const st = r.stats;
+  const chips = [];
+  chips.push('<span class="stat del"><b>' + st.comments + '</b> comment</span>');
+  chips.push('<span class="stat doc"><b>' + st.docs + '</b> docstring</span>');
+  if (st.kept) chips.push('<span class="stat keep"><b>' + st.kept + '</b> chỉ thị giữ lại</span>');
+  if (state.mode === 'strip' && st.linesBefore !== undefined) chips.push('<span class="stat"><b>' + st.linesBefore + '</b> → <b>' + st.linesAfter + '</b> dòng code</span>');
+  if (r.notebook) chips.push('<span class="stat">' + st.cells + ' ô' + (st.removedCells ? ', bỏ ' + st.removedCells + ' ô markdown' : '') + '</span>');
+  stats.innerHTML = chips.join('');
+
+  const out = $('out');
+  if (state.view === 'mark') out.innerHTML = markHTML(r.marks, r.notebook);
+  else {
+    let txt = r.notebook && state.mode === 'strip' ? r.view : r.out;
+    if (state.mode === 'extract' && !txt) txt = '(Không tìm thấy comment hay docstring nào khớp tuỳ chọn.)';
+    out.textContent = txt;
+  }
+  $('legend').hidden = state.view !== 'mark';
+  $('outHint').textContent = r.notebook && state.mode === 'strip' && state.view === 'out' ? 'Đang xem dạng từng ô; Copy và Tải về là file .ipynb.' : '';
+  $('outHint').hidden = !$('outHint').textContent;
+  $('copy').textContent = r.notebook && state.mode === 'strip' ? 'Copy JSON .ipynb' : 'Copy';
+  renderFiles();
+  updateDl();
+}
+
+function renderFiles() {
+  const box = $('files');
+  const many = state.items.length > 1;
+  box.hidden = !many;
+  $('clearAll').hidden = !many;
+  if (!many) { box.innerHTML = ''; return; }
+  box.innerHTML = '';
+  for (const it of state.items) {
+    const b = document.createElement('div');
+    b.className = 'file'; b.setAttribute('role', 'tab'); b.tabIndex = 0;
+    b.setAttribute('aria-current', String(it.id === state.active));
+    b.setAttribute('aria-selected', String(it.id === state.active));
+    b.title = it.path || it.name;
+    const lg = S.L[effLang(it)];
+    b.innerHTML = '<span class="n"></span><em></em>' + (it.id === 'paste' ? '' : '<button type="button" class="x" aria-label="Bỏ file">×</button>');
+    b.querySelector('.n').textContent = it.name;
+    b.querySelector('em').textContent = lg ? lg.label.split(' ')[0] : '';
+    b.addEventListener('click', (e) => {
+      if (e.target.classList.contains('x')) {
+        state.items = state.items.filter((x) => x !== it);
+        if (state.active === it.id) state.active = (state.items[1] || state.items[0]).id;
+      } else state.active = it.id;
+      render();
+    });
+    b.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); state.active = it.id; render(); } });
+    box.appendChild(b);
+  }
+  const fileCount = state.items.length - 1;
+  $('inInfo').textContent = fileCount + ' file đã nạp. Bấm từng file để xem; có thể sửa trực tiếp.';
+}
+
+// ---------- controls ----------
+function fillLangs() {
+  const sel = $('lang');
+  sel.innerHTML = '<option value="auto">Tự nhận diện</option>' + LANG_ORDER.map((k) => '<option value="' + k + '">' + esc(S.L[k].label) + '</option>').join('');
+  $('langList').textContent = LANG_ORDER.map((k) => S.L[k].label).join(' · ') + '.';
+}
+fillLangs();
+
+let timer = 0;
+$('src').addEventListener('input', (e) => {
+  cur().text = e.target.value;
+  clearTimeout(timer); timer = setTimeout(() => { render(); save(); }, 160);
+});
+$('lang').addEventListener('change', (e) => { cur().lang = e.target.value; render(); save(); });
+const bindOpt = (id, key) => {
+  const el = $(id); el.checked = !!state.opts[key];
+  el.addEventListener('change', () => { state.opts[key] = el.checked; render(); save(); });
+};
+bindOpt('optComments', 'comments'); bindOpt('optDocs', 'docs'); bindOpt('optKeep', 'keepDirectives');
+bindOpt('optCollapse', 'collapse'); bindOpt('optNbMd', 'nbDropMarkdown'); bindOpt('optNbOut', 'nbClearOutputs');
+function setMode(m) { state.mode = m; $('modeStrip').setAttribute('aria-pressed', String(m === 'strip')); $('modeExtract').setAttribute('aria-pressed', String(m === 'extract')); $('optCollapse').closest('.chip').hidden = m === 'extract'; render(); save(); }
+function setView(v) { state.view = v; $('viewOut').setAttribute('aria-pressed', String(v === 'out')); $('viewMark').setAttribute('aria-pressed', String(v === 'mark')); render(); save(); }
+$('modeStrip').onclick = () => setMode('strip');
+$('modeExtract').onclick = () => setMode('extract');
+$('viewOut').onclick = () => setView('out');
+$('viewMark').onclick = () => setView('mark');
+$('loadSample').onclick = () => { state.items[0].text = SAMPLE; state.items[0].lang = 'auto'; state.active = 'paste'; render(); save(); };
+$('clearAll').onclick = () => { state.items = [state.items[0]]; state.active = 'paste'; $('inInfo').textContent = 'Thả file vào khung này cũng được.'; render(); };
+
+// tab key inserts a tab in the editor
+$('src').addEventListener('keydown', (e) => {
+  if (e.key !== 'Tab' || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+  e.preventDefault();
+  const t = e.target, s = t.selectionStart, en = t.selectionEnd;
+  t.setRangeText('    ', s, en, 'end');
+  t.dispatchEvent(new Event('input'));
+});
+
+// ---------- files ----------
+const SKIP_DIR = /(^|\/)(node_modules|\.git|\.venv|venv|__pycache__|\.ipynb_checkpoints|dist|build|\.next|target|\.idea|\.vscode)(\/|$)/;
+async function addFiles(list) {
+  const arr = Array.from(list);
+  let added = 0, skipped = 0;
+  for (const f of arr) {
+    const path = f.webkitRelativePath || f.relPath || f.name;
+    if (SKIP_DIR.test(path)) { skipped++; continue; }
+    const known = S.langFromName(f.name);
+    if (arr.length > 1 && !known) { skipped++; continue; }
+    if (f.size > 5 * 1024 * 1024) { skipped++; continue; }
+    let text;
+    try { text = await f.text(); } catch (e) { skipped++; continue; }
+    if (/\u0000/.test(text.slice(0, 4000))) { skipped++; continue; }
+    const id = 'f' + (++seq);
+    state.items.push({ id, name: f.name, path, text, lang: 'auto' });
+    if (!added) state.active = id;
+    added++;
+  }
+  render();
+  toast(added ? `Đã nạp ${added} file` + (skipped ? `, bỏ qua ${skipped} file không phải code` : '') : 'Không có file code nào được nạp');
+}
+$('pickFiles').onclick = () => $('fileInput').click();
+$('pickDir').onclick = () => $('dirInput').click();
+$('fileInput').onchange = (e) => { addFiles(e.target.files); e.target.value = ''; };
+$('dirInput').onchange = (e) => { addFiles(e.target.files); e.target.value = ''; };
+
+async function walkEntry(entry, prefix, out) {
+  if (entry.isFile) {
+    await new Promise((res) => entry.file((f) => { f.relPath = prefix + f.name; out.push(f); res(); }, res));
+  } else if (entry.isDirectory) {
+    const path = prefix + entry.name + '/';
+    if (SKIP_DIR.test(path)) return;
+    const reader = entry.createReader();
+    let batch;
+    do {
+      batch = await new Promise((res) => reader.readEntries(res, () => res([])));
+      for (const e of batch) await walkEntry(e, path, out);
+    } while (batch.length);
+  }
+}
+const panel = $('inPanel');
+let dragDepth = 0;
+panel.addEventListener('dragenter', (e) => { e.preventDefault(); dragDepth++; panel.classList.add('dragging'); });
+panel.addEventListener('dragover', (e) => { e.preventDefault(); });
+panel.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; panel.classList.remove('dragging'); } });
+panel.addEventListener('drop', async (e) => {
+  e.preventDefault(); dragDepth = 0; panel.classList.remove('dragging');
+  const dt = e.dataTransfer;
+  const entries = dt.items ? Array.from(dt.items).map((i) => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean) : [];
+  if (entries.length && entries.some((x) => x.isDirectory)) {
+    const files = []; for (const en of entries) await walkEntry(en, '', files);
+    addFiles(files);
+  } else if (dt.files && dt.files.length) addFiles(dt.files);
+  else if (dt.getData('text')) { state.items[0].text = dt.getData('text'); state.active = 'paste'; render(); save(); }
+});
+
+// ---------- copy / download ----------
+let toastT = 0;
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2200); }
+$('copy').onclick = async () => {
+  if (!last) return;
+  const text = last.out;
+  try { await navigator.clipboard.writeText(text); toast('Đã copy'); }
+  catch (e) {
+    const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); toast('Đã copy'); } catch (e2) { toast('Trình duyệt chặn copy, hãy bôi đen và copy thủ công'); }
+    ta.remove();
+  }
+};
+
+let dl = null;
+const DIRECT = /\.(txt|json|md|html|csv|svg)$/i;
+function outName(it, mode) {
+  const base = it.path || it.name || 'code.txt';
+  const name = it.id === 'paste' ? 'doan-dan' + extFor(effLang(it)) : base;
+  return mode === 'extract' ? name + '.comments.txt' : name;
+}
+function extFor(lang) {
+  const m = { python: '.py', js: '.js', ts: '.ts', c: '.c', cpp: '.cpp', java: '.java', csharp: '.cs', go: '.go', rust: '.rs', sql: '.sql', html: '.html', css: '.css', scss: '.scss', php: '.php', shell: '.sh', r: '.R', ruby: '.rb', lua: '.lua', matlab: '.m', latex: '.tex', kotlin: '.kt', swift: '.swift', dart: '.dart', yaml: '.yml', haskell: '.hs', julia: '.jl', ipynb: '.ipynb' };
+  return m[lang] || '.txt';
+}
+function updateDl() {
+  $('dlOne').hidden = !dl || !last;
+  $('dlAll').hidden = !dl || state.items.length < 3;
+}
+async function saveFile(filename, data) {
+  try { await dl.save({ filename, data }); toast('Đã tải xuống'); }
+  catch (e) {
+    const code = e && e.code;
+    if (code === 'declined') return;
+    if (code === 'rate_limited') toast('Đang có hộp thoại tải xuống mở, thử lại sau');
+    else toast('Không tải được file ở đây' + (e && e.message ? ': ' + e.message : ''));
+  }
+}
+$('dlOne').onclick = () => {
+  if (!last) return;
+  const it = cur();
+  const name = outName(it, state.mode).split('/').pop();
+  if (DIRECT.test(name)) saveFile(name, last.out);
+  else saveFile(name + '.zip', zip([{ name, data: last.out }]));
+};
+$('dlAll').onclick = () => {
+  const files = [];
+  const errs = [];
+  for (const it of state.items) {
+    if (it.id === 'paste') continue;
+    try { files.push({ name: outName(it, state.mode), data: process(it, state.mode).out }); }
+    catch (e) { errs.push(it.name); }
+  }
+  if (!files.length) return toast('Không có file nào để tải');
+  saveFile(state.mode === 'extract' ? 'comments.zip' : 'code-da-loc.zip', zip(files));
+  if (errs.length) toast('Bỏ qua ' + errs.length + ' file lỗi: ' + errs.slice(0, 3).join(', '));
+};
+
+// minimal ZIP (store, no compression)
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+const crc32 = (b) => { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+function zip(files) {
+  const enc = new TextEncoder();
+  const d = new Date();
+  const time = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+  const date = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+  const chunks = [], central = [];
+  let off = 0;
+  const used = new Set();
+  for (const f of files) {
+    let name = f.name.replace(/^\/+/, '');
+    while (used.has(name)) name = name.replace(/(\.[^./]*)?$/, (m) => '_' + m);
+    used.add(name);
+    const nb = enc.encode(name), db = enc.encode(f.data), crc = crc32(db);
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(8, 0, true);
+    lh.setUint16(10, time, true); lh.setUint16(12, date, true); lh.setUint32(14, crc, true);
+    lh.setUint32(18, db.length, true); lh.setUint32(22, db.length, true); lh.setUint16(26, nb.length, true); lh.setUint16(28, 0, true);
+    chunks.push(new Uint8Array(lh.buffer), nb, db);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true);
+    ch.setUint16(12, time, true); ch.setUint16(14, date, true); ch.setUint32(16, crc, true); ch.setUint32(20, db.length, true); ch.setUint32(24, db.length, true);
+    ch.setUint16(28, nb.length, true); ch.setUint16(30, 0, true); ch.setUint16(32, 0, true); ch.setUint16(34, 0, true); ch.setUint16(36, 0, true);
+    ch.setUint32(38, 0, true); ch.setUint32(42, off, true);
+    central.push(new Uint8Array(ch.buffer), nb);
+    off += 30 + nb.length + db.length;
+  }
+  const cdSize = central.reduce((a, c) => a + c.length, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+  end.setUint32(12, cdSize, true); end.setUint32(16, off, true);
+  return new Blob([...chunks, ...central, new Uint8Array(end.buffer)]);
+}
+
+// ---------- boot ----------
+function start(data) {
+  restore(data);
+  ['optComments', 'optDocs', 'optKeep', 'optCollapse', 'optNbMd', 'optNbOut'].forEach((id) => {
+    const key = { optComments: 'comments', optDocs: 'docs', optKeep: 'keepDirectives', optCollapse: 'collapse', optNbMd: 'nbDropMarkdown', optNbOut: 'nbClearOutputs' }[id];
+    $(id).checked = !!state.opts[key];
+  });
+  setMode(state.mode);
+  setView(state.view);
+}
+window.claude?.hot?.snapshot?.(() => snapshot());
+if (window.claude?.hot?.ready) window.claude.hot.ready(start); else start(window.claude?.hot?.data ?? {});
+
+if (window.claude && window.claude.use) {
+  window.claude.use('downloads').then((d) => { dl = d; updateDl(); }).catch(() => {});
+}
+})();
+</script>
+</body>
+</html>
